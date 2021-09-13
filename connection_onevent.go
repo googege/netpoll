@@ -99,34 +99,39 @@ func (c *connection) onRequest() (err error) {
 	if !c.lock(processing) {
 		return nil
 	}
-	// add new task
-	var task = func() {
-		if c.ctx == nil {
-			c.ctx = context.Background()
-		}
-		var handler = process.(OnRequest)
-	START:
-		// NOTE: loop processing, which is useful for streaming.
-		for c.Reader().Len() > 0 && c.IsActive() {
-			// Single request processing, blocking allowed.
-			handler(c.ctx, c)
-		}
-		// Handling callback if connection has been closed.
-		if !c.IsActive() {
-			c.closeCallback(false)
-			return
-		}
-		// Double check when exiting.
-		c.unlock(processing)
-		if c.Reader().Len() > 0 {
-			if !c.lock(processing) {
-				return
-			}
-			goto START
-		}
-	}
-	runTask(c.ctx, task)
+	var handler = process.(OnRequest)
+	handler(c.ctx, c)
+	c.unlock(processing)
 	return nil
+
+	// add new task
+	// var task = func() {
+	// 	if c.ctx == nil {
+	// 		c.ctx = context.Background()
+	// 	}
+	// 	var handler = process.(OnRequest)
+	// START:
+	// 	// NOTE: loop processing, which is useful for streaming.
+	// 	for c.Reader().Len() > 0 && c.IsActive() {
+	// 		// Single request processing, blocking allowed.
+	// 		handler(c.ctx, c)
+	// 	}
+	// 	// Handling callback if connection has been closed.
+	// 	if !c.IsActive() {
+	// 		c.closeCallback(false)
+	// 		return
+	// 	}
+	// 	// Double check when exiting.
+	// 	c.unlock(processing)
+	// 	if c.Reader().Len() > 0 {
+	// 		if !c.lock(processing) {
+	// 			return
+	// 		}
+	// 		goto START
+	// 	}
+	// }
+	// runTask(c.ctx, task)
+	// return nil
 }
 
 // closeCallback .
