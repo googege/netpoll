@@ -43,6 +43,7 @@ type gracefulExit interface {
 // OnPrepare, OnRequest, CloseCallback share the lock processing,
 // which is a CAS lock and can only be cleared by OnRequest.
 type onEvent struct {
+	serial    bool // the switch for process OnRequest serially
 	ctx       context.Context
 	process   atomic.Value // value is OnRequest
 	callbacks atomic.Value // value is latest *callbackNode
@@ -82,6 +83,9 @@ func (c *connection) onPrepare(prepare OnPrepare) (err error) {
 	if prepare != nil {
 		c.ctx = prepare(c)
 	}
+	if c.ctx == nil {
+		c.ctx = context.Background()
+	}
 	// prepare may close the connection.
 	if c.IsActive() {
 		return c.register()
@@ -99,12 +103,15 @@ func (c *connection) onRequest() (err error) {
 	if !c.lock(processing) {
 		return nil
 	}
-	// add new task
+	var handler = process.(OnRequest)
+	if c.serial {
+		handler(c.ctx, c)
+		c.unlock(processing)
+		return nil
+	}
+
+	// async: add new task
 	var task = func() {
-		if c.ctx == nil {
-			c.ctx = context.Background()
-		}
-		var handler = process.(OnRequest)
 	START:
 		// NOTE: loop processing, which is useful for streaming.
 		for c.Reader().Len() > 0 && c.IsActive() {
